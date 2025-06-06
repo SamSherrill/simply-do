@@ -19,6 +19,39 @@ const ddb = new AWS.DynamoDB();
 
 console.log("DynamoDB DocumentClient created"); // You can add this line to verify
 
+const tableName = "todos";
+
+ddb.listTables({}, (err, data) => {
+  if (err) {
+    console.error("Error listing tables:", err);
+  } else if (!data.TableNames.includes(tableName)) {
+    console.log(`Table "${tableName}" does not exist. Creating...`);
+    const params = {
+      TableName: tableName,
+      KeySchema: [
+        { AttributeName: "id", KeyType: "HASH" } // Partition key
+      ],
+      AttributeDefinitions: [
+        { AttributeName: "id", AttributeType: "S" }
+      ],
+      ProvisionedThroughput: {
+        ReadCapacityUnits: 5,
+        WriteCapacityUnits: 5
+      }
+    };
+
+    ddb.createTable(params, (err, data) => {
+      if (err) {
+        console.error("Error creating table:", err);
+      } else {
+        console.log("Table created successfully:", data);
+      }
+    });
+  } else {
+    console.log(`Table "${tableName}" already exists.`);
+  }
+});
+
 app.get("/", (req, res) => {
   console.log("Root path '/' was accessed!");
   res.send("Hello World!");
