@@ -91,6 +91,12 @@ app.post("/todos", async (req, res) => {
   }
 });
 
+// Get all to-dos
+// Example: GET /todos
+// This endpoint retrieves all to-do items from the "todos" table in DynamoDB.
+// It uses the DynamoDB DocumentClient to scan the table and return all items.
+// The response includes an array of to-do items, each containing its details.
+// The endpoint is defined using the Express.js framework, which handles HTTP requests and responses.
 app.get("/todos", async (req, res) => {
   try {
     const params = {
@@ -102,6 +108,36 @@ app.get("/todos", async (req, res) => {
   } catch (error) {
     console.error("Error getting to-dos:", error);
     res.status(500).send({ message: "Failed to retrieve to-dos." });
+  }
+});
+
+// Get a specific to-do by ID
+// Example: GET /todos/:id
+// This endpoint retrieves a specific to-do item by its ID.
+// It uses the DynamoDB DocumentClient to fetch the item from the "todos" table.
+// The ID is passed as a URL parameter, and the response includes the to-do item if found, or a 404 error if not found.
+// The endpoint is defined using the Express.js framework, which handles HTTP requests and responses.
+app.get('/todos/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const params = {
+      TableName: tableName,
+      Key: {
+        id: id,
+      },
+    };
+
+    const result = await dynamodb.get(params).promise();
+
+    if (result.Item) {
+      res.status(200).send(result.Item);
+    } else {
+      res.status(404).send({ message: 'To-do not found.' });
+    }
+  } catch (error) {
+    console.error('Error getting to-do:', error);
+    res.status(500).send({ message: 'Failed to retrieve to-do.' });
   }
 });
 
