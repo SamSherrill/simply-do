@@ -203,6 +203,37 @@ app.put('/todos/:id', async (req, res) => {
   }
 });
 
+// DELETE a specific to-do by ID
+// Example: DELETE /todos/:id
+// This endpoint deletes a specific to-do item by its ID.
+// It uses the DynamoDB DocumentClient to remove the item from the "todos" table.
+// The ID is passed as a URL parameter, and the response includes the deleted to-do item
+// if it was found and deleted successfully.
+app.delete('/todos/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const params = {
+      TableName: tableName,
+      Key: {
+        id: id,
+      },
+      ReturnValues: 'ALL_OLD', // Return the item that was deleted
+    };
+
+    const result = await dynamodb.delete(params).promise();
+
+    if (result.Attributes) {
+      res.status(200).send(result.Attributes);
+    } else {
+      res.status(404).send({ message: 'To-do not found.' });
+    }
+  } catch (error) {
+    console.error('Error deleting to-do:', error);
+    res.status(500).send({ message: 'Failed to delete to-do.' });
+  }
+});
+
 // Example: Listing DynamoDB tables
 ddb.listTables({}, (err, data) => {
   if (err) {
