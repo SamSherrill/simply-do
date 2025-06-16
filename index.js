@@ -91,6 +91,20 @@ app.post("/todos", async (req, res) => {
   }
 });
 
+app.get("/todos", async (req, res) => {
+  try {
+    const params = {
+      TableName: tableName,
+    };
+
+    const result = await dynamodb.scan(params).promise();
+    res.status(200).send(result.Items); // Send the array of to-do items
+  } catch (error) {
+    console.error("Error getting to-dos:", error);
+    res.status(500).send({ message: "Failed to retrieve to-dos." });
+  }
+});
+
 // Example: Listing DynamoDB tables
 ddb.listTables({}, (err, data) => {
   if (err) {
