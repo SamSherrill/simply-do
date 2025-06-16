@@ -4,13 +4,13 @@ const app = express();
 const port = 3000;
 
 AWS.config.update({
-  region: 'us-west-2', // You can choose any dummy region for local
-  endpoint: 'http://localhost:8000'
+  region: "us-west-2", // You can choose any dummy region for local
+  endpoint: "http://localhost:8000",
 });
 
 AWS.config.credentials = {
-  accessKeyId: 'dummyKeyId',
-  secretAccessKey: 'dummySecretKey',
+  accessKeyId: "dummyKeyId",
+  secretAccessKey: "dummySecretKey",
 };
 
 // Create a DynamoDB DocumentClient, which simplifies working with DynamoDB items
@@ -29,15 +29,13 @@ ddb.listTables({}, (err, data) => {
     const params = {
       TableName: tableName,
       KeySchema: [
-        { AttributeName: "id", KeyType: "HASH" } // Partition key
+        { AttributeName: "id", KeyType: "HASH" }, // Partition key
       ],
-      AttributeDefinitions: [
-        { AttributeName: "id", AttributeType: "S" }
-      ],
+      AttributeDefinitions: [{ AttributeName: "id", AttributeType: "S" }],
       ProvisionedThroughput: {
         ReadCapacityUnits: 5,
-        WriteCapacityUnits: 5
-      }
+        WriteCapacityUnits: 5,
+      },
     };
 
     ddb.createTable(params, (err, data) => {
@@ -55,6 +53,42 @@ ddb.listTables({}, (err, data) => {
 app.get("/", (req, res) => {
   console.log("Root path '/' was accessed!");
   res.send("Hello World!");
+});
+
+// Middleware to parse JSON request bodies
+app.use(express.json());
+
+app.post("/todos", async (req, res) => {
+  try {
+    const { title, content, focusArea } = req.body;
+
+    if (!title) {
+      return res.status(400).send({ message: "Title is required." });
+    }
+
+    const newTodo = {
+      id: require("crypto").randomUUID(), // Generate a unique ID
+      title,
+      content: content || "",
+      focusArea: focusArea || "",
+      completed: false,
+      archived: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const params = {
+      TableName: tableName,
+      Item: newTodo,
+    };
+
+    await dynamodb.put(params).promise();
+
+    res.status(201).send(newTodo); // Respond with the newly created to-do
+  } catch (error) {
+    console.error("Error adding to-do:", error);
+    res.status(500).send({ message: "Failed to add to-do." });
+  }
 });
 
 // Example: Listing DynamoDB tables
