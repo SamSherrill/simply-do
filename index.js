@@ -17,8 +17,6 @@ AWS.config.credentials = {
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 const ddb = new AWS.DynamoDB();
 
-console.log("DynamoDB DocumentClient created"); // You can add this line to verify
-
 const tableName = "todos";
 
 ddb.listTables({}, (err, data) => {
@@ -58,6 +56,14 @@ app.get("/", (req, res) => {
 // Middleware to parse JSON request bodies
 app.use(express.json());
 
+// Add a new to-do
+// Example: POST /todos
+// This endpoint allows users to add a new to-do item.
+// It expects a JSON body with the fields such as: title, content, and focusArea.
+// The title is required, while content and focusArea are optional.
+// If the title is missing, it returns a 400 Bad Request status with an error message
+// The new to-do item is created with a unique ID, and the current timestamp for createdAt and updatedAt fields.
+// The endpoint responds with the newly created to-do item.
 app.post("/todos", async (req, res) => {
   try {
     const { title, content, focusArea } = req.body;
@@ -96,7 +102,6 @@ app.post("/todos", async (req, res) => {
 // This endpoint retrieves all to-do items from the "todos" table in DynamoDB.
 // It uses the DynamoDB DocumentClient to scan the table and return all items.
 // The response includes an array of to-do items, each containing its details.
-// The endpoint is defined using the Express.js framework, which handles HTTP requests and responses.
 app.get("/todos", async (req, res) => {
   try {
     const params = {
@@ -115,8 +120,7 @@ app.get("/todos", async (req, res) => {
 // Example: GET /todos/:id
 // This endpoint retrieves a specific to-do item by its ID.
 // It uses the DynamoDB DocumentClient to fetch the item from the "todos" table.
-// The ID is passed as a URL parameter, and the response includes the to-do item if found, or a 404 error if not found.
-// The endpoint is defined using the Express.js framework, which handles HTTP requests and responses.
+// The ID is passed as a URL parameter, and the response includes the to-do item if found.
 app.get('/todos/:id', async (req, res) => {
   try {
     const id = req.params.id;
@@ -138,6 +142,64 @@ app.get('/todos/:id', async (req, res) => {
   } catch (error) {
     console.error('Error getting to-do:', error);
     res.status(500).send({ message: 'Failed to retrieve to-do.' });
+  }
+});
+
+// UPDATE a specific to-do by ID
+// Example: PUT /todos/:id
+// This endpoint updates a specific to-do item by its ID.
+// It allows partial updates, meaning the user can update only the fields they want to change.
+// The request body can include any combination of fields: title, content, focusArea, completed, and archived.
+// The ID is passed as a URL parameter, and the response includes the updated to-do item.
+app.put('/todos/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const { title, content, focusArea, completed, archived } = req.body;
+
+    const updateExpressionParts = [];
+    const expressionAttributeValues = {};
+
+    if (title !== undefined) {
+      updateExpressionParts.push('title = :title');
+      expressionAttributeValues[':title'] = title;
+    }
+    if (content !== undefined) {
+      updateExpressionParts.push('content = :content');
+      expressionAttributeValues[':content'] = content;
+    }
+    if (focusArea !== undefined) {
+      updateExpressionParts.push('focusArea = :focusArea');
+      expressionAttributeValues[':focusArea'] = focusArea;
+    }
+    if (completed !== undefined) {
+      updateExpressionParts.push('completed = :completed');
+      expressionAttributeValues[':completed'] = completed;
+    }
+    if (archived !== undefined) {
+      updateExpressionParts.push('archived = :archived');
+      expressionAttributeValues[':archived'] = archived;
+    }
+
+    if (updateExpressionParts.length === 0) {
+      return res.status(400).send({ message: 'No fields to update.' });
+    }
+
+    const updateExpression = 'set ' + updateExpressionParts.join(', ');
+
+    const params = {
+      TableName: tableName,
+      Key: { id: id },
+      UpdateExpression: updateExpression,
+      ExpressionAttributeValues: expressionAttributeValues,
+      ReturnValues: 'ALL_NEW', // Return the updated item
+    };
+
+    const result = await dynamodb.update(params).promise();
+
+    res.status(200).send(result.Attributes);
+  } catch (error) {
+    console.error('Error updating to-do:', error);
+    res.status(500).send({ message: 'Failed to update to-do.' });
   }
 });
 
