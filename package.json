@@ -3,6 +3,7 @@
     "version": "1.0.0",
     "description": "A simple to-do list application",
     "main": "index.js",
+    "type": "module",
     "scripts": {
         "start": "node index.js",
         "test": "echo \"Error: no test specified\" && exit 1"
@@ -10,7 +11,8 @@
     "author": "",
     "license": "MIT",
     "dependencies": {
-        "aws-sdk": "^2.1692.0",
+        "@aws-sdk/client-dynamodb": "^3.830.0",
+        "@aws-sdk/lib-dynamodb": "^3.830.0",
         "express": "^5.1.0"
     }
 }

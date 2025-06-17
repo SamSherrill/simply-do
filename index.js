@@ -1,25 +1,37 @@
-const express = require("express");
-const AWS = require("aws-sdk");
+import { DynamoDBClient, CreateTableCommand, DynamoDB } from "@aws-sdk/client-dynamodb";
+import { DynamoDBDocumentClient, PutCommand, ScanCommand, GetCommand, UpdateCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
+import express from 'express';
+import { randomUUID } from 'crypto';
+
 const app = express();
 const port = 3000;
 
-AWS.config.update({
-  region: "us-west-2", // You can choose any dummy region for local
-  endpoint: "http://localhost:8000",
+// Configure the AWS SDK to connect to DynamoDB Local (v3)
+const ddbClient = new DynamoDBClient({
+  region: 'us-west-2', // Dummy region for local
+  endpoint: 'http://localhost:8000',
+  credentials: {
+    accessKeyId: 'dummyKeyId',
+    secretAccessKey: 'dummySecretKey',
+  },
 });
 
-AWS.config.credentials = {
-  accessKeyId: "dummyKeyId",
-  secretAccessKey: "dummySecretKey",
-};
+// Create a DynamoDB DocumentClient (v3), which simplifies working with DynamoDB items
+const dynamodb = DynamoDBDocumentClient.from(ddbClient);
+console.log("DynamoDB v3 DocumentClient created");
 
-// Create a DynamoDB DocumentClient, which simplifies working with DynamoDB items
-const dynamodb = new AWS.DynamoDB.DocumentClient();
-const ddb = new AWS.DynamoDB();
+const ddb = new DynamoDB({
+  region: 'us-west-2', // Dummy region for local
+  endpoint: 'http://localhost:8000',
+  credentials: {
+    accessKeyId: 'dummyKeyId',
+    secretAccessKey: 'dummySecretKey',
+  },
+});
 
 const tableName = "todos";
 
-ddb.listTables({}, (err, data) => {
+ddb.listTables({}, async (err, data) => {
   if (err) {
     console.error("Error listing tables:", err);
   } else if (!data.TableNames.includes(tableName)) {
@@ -27,22 +39,25 @@ ddb.listTables({}, (err, data) => {
     const params = {
       TableName: tableName,
       KeySchema: [
-        { AttributeName: "id", KeyType: "HASH" }, // Partition key
+        { AttributeName: "id", KeyType: "HASH" } // Partition key
       ],
-      AttributeDefinitions: [{ AttributeName: "id", AttributeType: "S" }],
+      AttributeDefinitions: [
+        { AttributeName: "id", AttributeType: "S" }
+      ],
       ProvisionedThroughput: {
         ReadCapacityUnits: 5,
-        WriteCapacityUnits: 5,
-      },
+        WriteCapacityUnits: 5
+      }
     };
 
-    ddb.createTable(params, (err, data) => {
-      if (err) {
-        console.error("Error creating table:", err);
-      } else {
-        console.log("Table created successfully:", data);
-      }
-    });
+    const command = new CreateTableCommand(params);
+
+    try {
+      const data = await ddb.send(command);
+      console.log("Table created successfully:", data);
+    } catch (error) {
+      console.error("Error creating table:", error);
+    }
   } else {
     console.log(`Table "${tableName}" already exists.`);
   }
@@ -73,7 +88,7 @@ app.post("/todos", async (req, res) => {
     }
 
     const newTodo = {
-      id: require("crypto").randomUUID(), // Generate a unique ID
+      id: randomUUID(),
       title,
       content: content || "",
       focusArea: focusArea || "",
@@ -88,7 +103,9 @@ app.post("/todos", async (req, res) => {
       Item: newTodo,
     };
 
-    await dynamodb.put(params).promise();
+    const command = new PutCommand(params);
+
+    await dynamodb.send(command);
 
     res.status(201).send(newTodo); // Respond with the newly created to-do
   } catch (error) {
@@ -104,11 +121,9 @@ app.post("/todos", async (req, res) => {
 // The response includes an array of to-do items, each containing its details.
 app.get("/todos", async (req, res) => {
   try {
-    const params = {
-      TableName: tableName,
-    };
+    const command = new ScanCommand({ TableName: tableName });
 
-    const result = await dynamodb.scan(params).promise();
+    const result = await dynamodb.send(command);
     res.status(200).send(result.Items); // Send the array of to-do items
   } catch (error) {
     console.error("Error getting to-dos:", error);
@@ -132,7 +147,9 @@ app.get('/todos/:id', async (req, res) => {
       },
     };
 
-    const result = await dynamodb.get(params).promise();
+    const command = new GetCommand(params);
+
+    const result = await dynamodb.send(command);
 
     if (result.Item) {
       res.status(200).send(result.Item);
@@ -194,7 +211,9 @@ app.put('/todos/:id', async (req, res) => {
       ReturnValues: 'ALL_NEW', // Return the updated item
     };
 
-    const result = await dynamodb.update(params).promise();
+    const command = new UpdateCommand(params);
+
+    const result = await dynamodb.send(command);
 
     res.status(200).send(result.Attributes);
   } catch (error) {
@@ -221,9 +240,11 @@ app.delete('/todos/:id', async (req, res) => {
       ReturnValues: 'ALL_OLD', // Return the item that was deleted
     };
 
-    const result = await dynamodb.delete(params).promise();
+    const command = new DeleteCommand(params);
 
-    if (result.Attributes) {
+    const result = await dynamodb.send(command);
+
+    if (result && result.Attributes) {
       res.status(200).send(result.Attributes);
     } else {
       res.status(404).send({ message: 'To-do not found.' });
