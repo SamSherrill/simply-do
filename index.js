@@ -74,14 +74,14 @@ app.use(express.json());
 // Add a new to-do
 // Example: POST /todos
 // This endpoint allows users to add a new to-do item.
-// It expects a JSON body with the fields such as: title, content, and focusArea.
-// The title is required, while content and focusArea are optional.
+// It expects a JSON body with the fields such as: title, notes, and focusArea.
+// The title is required, while notes and focusArea are optional.
 // If the title is missing, it returns a 400 Bad Request status with an error message
 // The new to-do item is created with a unique ID, and the current timestamp for createdAt and updatedAt fields.
 // The endpoint responds with the newly created to-do item.
 app.post("/todos", async (req, res) => {
   try {
-    const { title, content, focusArea } = req.body;
+    const { title, notes, focusArea } = req.body;
 
     if (!title) {
       return res.status(400).send({ message: "Title is required." });
@@ -90,7 +90,7 @@ app.post("/todos", async (req, res) => {
     const newTodo = {
       id: randomUUID(),
       title,
-      content: content || "",
+      notes: notes || "",
       focusArea: focusArea || "",
       completed: false,
       archived: false,
@@ -166,12 +166,12 @@ app.get('/todos/:id', async (req, res) => {
 // Example: PUT /todos/:id
 // This endpoint updates a specific to-do item by its ID.
 // It allows partial updates, meaning the user can update only the fields they want to change.
-// The request body can include any combination of fields: title, content, focusArea, completed, and archived.
+// The request body can include any combination of fields: title, notes, focusArea, completed, and archived.
 // The ID is passed as a URL parameter, and the response includes the updated to-do item.
 app.put('/todos/:id', async (req, res) => {
   try {
     const id = req.params.id;
-    const { title, content, focusArea, completed, archived } = req.body;
+    const { title, notes, focusArea, completed, archived } = req.body;
 
     const updateExpressionParts = [];
     const expressionAttributeValues = {};
@@ -180,9 +180,9 @@ app.put('/todos/:id', async (req, res) => {
       updateExpressionParts.push('title = :title');
       expressionAttributeValues[':title'] = title;
     }
-    if (content !== undefined) {
-      updateExpressionParts.push('content = :content');
-      expressionAttributeValues[':content'] = content;
+    if (notes !== undefined) {
+      updateExpressionParts.push('notes = :notes');
+      expressionAttributeValues[':notes'] = notes;
     }
     if (focusArea !== undefined) {
       updateExpressionParts.push('focusArea = :focusArea');
