@@ -60,7 +60,7 @@ app.get('/', async (req, res) => {
 
 app.post('/todos', async (req, res) => {
   try {
-    const { title, notes, focusArea } = req.body;
+    const { title, notes, focusAreaId } = req.body;
 
     if (!title) {
       return res.status(400).send({ message: 'Title is required.' });
@@ -70,7 +70,7 @@ app.post('/todos', async (req, res) => {
       id: randomUUID(),
       title,
       notes: notes || '',
-      focusArea: focusArea || '',
+      focusAreaId: focusAreaId || null, // Use focusAreaId and set to null if not provided
       completed: false,
       archived: false,
       createdAt: new Date().toISOString(),
@@ -127,6 +127,27 @@ app.get('/todos/:id', async (req, res) => {
   } catch (error) {
     console.error('Error getting to-do:', error);
     res.status(500).send({ message: 'Failed to retrieve to-do.' });
+  }
+});
+
+app.get('/focus-areas/:focusAreaId/todos', async (req, res) => {
+  try {
+    const focusAreaId = req.params.focusAreaId;
+
+    const command = new ScanCommand({
+      TableName: todosTableName,
+      FilterExpression: "focusAreaId = :focusAreaId",
+      ExpressionAttributeValues: {
+        ":focusAreaId": focusAreaId,
+      },
+    });
+
+    const result = await dynamodb.send(command);
+
+    res.status(200).send(result.Items);
+  } catch (error) {
+    console.error('Error getting to-dos by focus area:', error);
+    res.status(500).send({ message: 'Failed to retrieve to-dos by focus area.' });
   }
 });
 
