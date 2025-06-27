@@ -154,7 +154,7 @@ app.get('/focus-areas/:focusAreaId/todos', async (req, res) => {
 app.put('/todos/:id', async (req, res) => {
   try {
     const id = req.params.id;
-    const { title, notes, focusArea, completed, archived } = req.body;
+    const { title, notes, focusAreaId, completed, archived } = req.body;
 
     const updateExpressionParts = [];
     const expressionAttributeValues = {};
@@ -168,9 +168,9 @@ app.put('/todos/:id', async (req, res) => {
       expressionAttributeValues[':notes'] = notes;
       console.log(notes)
     }
-    if (focusArea !== undefined) {
-      updateExpressionParts.push('focusArea = :focusArea');
-      expressionAttributeValues[':focusArea'] = focusArea;
+    if (focusAreaId !== undefined) {
+      updateExpressionParts.push('focusAreaId = :focusAreaId');
+      expressionAttributeValues[':focusAreaId'] = focusAreaId;
     }
     if (completed !== undefined) {
       updateExpressionParts.push('completed = :completed');
