@@ -1,10 +1,7 @@
-import { DynamoDBClient, CreateTableCommand, DynamoDB } from "@aws-sdk/client-dynamodb";
+import { DynamoDBClient, ListTablesCommand, CreateTableCommand, DynamoDB } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand, ScanCommand, GetCommand, UpdateCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
 import express from 'express';
 import { randomUUID } from 'crypto';
-
-const app = express();
-const port = 3000;
 
 // Configure the AWS SDK to connect to DynamoDB Local (v3)
 const ddbClient = new DynamoDBClient({
@@ -16,82 +13,64 @@ const ddbClient = new DynamoDBClient({
   },
 });
 
-// Create a DynamoDB DocumentClient (v3), which simplifies working with DynamoDB items
+// Create a DynamoDB DocumentClient (v3)
 const dynamodb = DynamoDBDocumentClient.from(ddbClient);
 console.log("DynamoDB v3 DocumentClient created");
 
-const ddb = new DynamoDB({
-  region: 'us-west-2', // Dummy region for local
-  endpoint: 'http://localhost:8000',
-  credentials: {
-    accessKeyId: 'dummyKeyId',
-    secretAccessKey: 'dummySecretKey',
-  },
-});
+const todosTableName = "todos";
+const focusAreasTableName = "focus_areas";
 
-const tableName = "todos";
-
-ddb.listTables({}, async (err, data) => {
-  if (err) {
-    console.error("Error listing tables:", err);
-  } else if (!data.TableNames.includes(tableName)) {
-    console.log(`Table "${tableName}" does not exist. Creating...`);
-    const params = {
-      TableName: tableName,
-      KeySchema: [
-        { AttributeName: "id", KeyType: "HASH" } // Partition key
-      ],
-      AttributeDefinitions: [
-        { AttributeName: "id", AttributeType: "S" }
-      ],
-      ProvisionedThroughput: {
-        ReadCapacityUnits: 5,
-        WriteCapacityUnits: 5
-      }
-    };
-
-    const command = new CreateTableCommand(params);
-
-    try {
-      const data = await ddb.send(command);
-      console.log("Table created successfully:", data);
-    } catch (error) {
-      console.error("Error creating table:", error);
+const createTableIfNotExists = async (tableName, keySchema, attributeDefinitions) => {
+  const listTablesCommand = new ListTablesCommand({});
+  try {
+    const { TableNames } = await ddbClient.send(listTablesCommand);
+    if (!TableNames.includes(tableName)) {
+      console.log(`Table "${tableName}" does not exist. Creating...`);
+      const params = {
+        TableName: tableName,
+        KeySchema: keySchema,
+        AttributeDefinitions: attributeDefinitions,
+        ProvisionedThroughput: {
+          ReadCapacityUnits: 5,
+          WriteCapacityUnits: 5
+        }
+      };
+      const createTableCommand = new CreateTableCommand(params);
+      await ddbClient.send(createTableCommand);
+      console.log(`Table "${tableName}" created successfully.`);
+    } else {
+      console.log(`Table "${tableName}" already exists.`);
     }
-  } else {
-    console.log(`Table "${tableName}" already exists.`);
+  } catch (error) {
+    console.error(`Error managing table "${tableName}":`, error);
   }
-});
+};
 
-app.get("/", (req, res) => {
-  console.log("Root path '/' was accessed!");
-  res.send("Hello World!");
-});
+// Use top-level await to call the function for both tables
+await createTableIfNotExists(todosTableName, [{ AttributeName: "id", KeyType: "HASH" }], [{ AttributeName: "id", AttributeType: "S" }]);
+await createTableIfNotExists(focusAreasTableName, [{ AttributeName: "id", KeyType: "HASH" }], [{ AttributeName: "id", AttributeType: "S" }]);
 
-// Middleware to parse JSON request bodies
+const app = express();
+
 app.use(express.json());
 
-// Add a new to-do
-// Example: POST /todos
-// This endpoint allows users to add a new to-do item.
-// It expects a JSON body with the fields such as: title, notes, and focusArea.
-// The title is required, while notes and focusArea are optional.
-// If the title is missing, it returns a 400 Bad Request status with an error message
-// The new to-do item is created with a unique ID, and the current timestamp for createdAt and updatedAt fields.
-// The endpoint responds with the newly created to-do item.
-app.post("/todos", async (req, res) => {
+app.get('/', async (req, res) => {
+  res.send('Hello World!');
+});
+
+app.post('/todos', async (req, res) => {
   try {
-    const { title, notes, focusArea } = req.body;
+    const { title, notes, focusAreaId } = req.body;
 
     if (!title) {
-      return res.status(400).send({ message: "Title is required." });
+      return res.status(400).send({ message: 'Title is required.' });
     }
 
     const newTodo = {
       id: randomUUID(),
       title,
-      notes: notes || "",
-      focusArea: focusArea || "",
+      notes: notes || '',
+      focusAreaId: focusAreaId || null, // Use focusAreaId and set to null if not provided
       completed: false,
       archived: false,
       createdAt: new Date().toISOString(),
@@ -99,7 +78,7 @@ app.post("/todos", async (req, res) => {
     };
 
     const params = {
-      TableName: tableName,
+      TableName: todosTableName,
       Item: newTodo,
     };
 
@@ -109,39 +88,28 @@ app.post("/todos", async (req, res) => {
 
     res.status(201).send(newTodo); // Respond with the newly created to-do
   } catch (error) {
-    console.error("Error adding to-do:", error);
-    res.status(500).send({ message: "Failed to add to-do." });
+    console.error('Error adding to-do:', error);
+    res.status(500).send({ message: 'Failed to add to-do.' });
   }
 });
 
-// Get all to-dos
-// Example: GET /todos
-// This endpoint retrieves all to-do items from the "todos" table in DynamoDB.
-// It uses the DynamoDB DocumentClient to scan the table and return all items.
-// The response includes an array of to-do items, each containing its details.
-app.get("/todos", async (req, res) => {
+app.get('/todos', async (req, res) => {
   try {
-    const command = new ScanCommand({ TableName: tableName });
-
+    const command = new ScanCommand({ TableName: todosTableName });
     const result = await dynamodb.send(command);
     res.status(200).send(result.Items); // Send the array of to-do items
   } catch (error) {
-    console.error("Error getting to-dos:", error);
-    res.status(500).send({ message: "Failed to retrieve to-dos." });
+    console.error('Error getting to-dos:', error);
+    res.status(500).send({ message: 'Failed to retrieve to-dos.' });
   }
 });
 
-// Get a specific to-do by ID
-// Example: GET /todos/:id
-// This endpoint retrieves a specific to-do item by its ID.
-// It uses the DynamoDB DocumentClient to fetch the item from the "todos" table.
-// The ID is passed as a URL parameter, and the response includes the to-do item if found.
 app.get('/todos/:id', async (req, res) => {
   try {
     const id = req.params.id;
 
     const params = {
-      TableName: tableName,
+      TableName: todosTableName,
       Key: {
         id: id,
       },
@@ -162,16 +130,31 @@ app.get('/todos/:id', async (req, res) => {
   }
 });
 
-// UPDATE a specific to-do by ID
-// Example: PUT /todos/:id
-// This endpoint updates a specific to-do item by its ID.
-// It allows partial updates, meaning the user can update only the fields they want to change.
-// The request body can include any combination of fields: title, notes, focusArea, completed, and archived.
-// The ID is passed as a URL parameter, and the response includes the updated to-do item.
+app.get('/focus-areas/:focusAreaId/todos', async (req, res) => {
+  try {
+    const focusAreaId = req.params.focusAreaId;
+
+    const command = new ScanCommand({
+      TableName: todosTableName,
+      FilterExpression: "focusAreaId = :focusAreaId",
+      ExpressionAttributeValues: {
+        ":focusAreaId": focusAreaId,
+      },
+    });
+
+    const result = await dynamodb.send(command);
+
+    res.status(200).send(result.Items);
+  } catch (error) {
+    console.error('Error getting to-dos by focus area:', error);
+    res.status(500).send({ message: 'Failed to retrieve to-dos by focus area.' });
+  }
+});
+
 app.put('/todos/:id', async (req, res) => {
   try {
     const id = req.params.id;
-    const { title, notes, focusArea, completed, archived } = req.body;
+    const { title, notes, focusAreaId, completed, archived } = req.body;
 
     const updateExpressionParts = [];
     const expressionAttributeValues = {};
@@ -183,10 +166,11 @@ app.put('/todos/:id', async (req, res) => {
     if (notes !== undefined) {
       updateExpressionParts.push('notes = :notes');
       expressionAttributeValues[':notes'] = notes;
+      console.log(notes)
     }
-    if (focusArea !== undefined) {
-      updateExpressionParts.push('focusArea = :focusArea');
-      expressionAttributeValues[':focusArea'] = focusArea;
+    if (focusAreaId !== undefined) {
+      updateExpressionParts.push('focusAreaId = :focusAreaId');
+      expressionAttributeValues[':focusAreaId'] = focusAreaId;
     }
     if (completed !== undefined) {
       updateExpressionParts.push('completed = :completed');
@@ -204,7 +188,7 @@ app.put('/todos/:id', async (req, res) => {
     const updateExpression = 'set ' + updateExpressionParts.join(', ');
 
     const params = {
-      TableName: tableName,
+      TableName: todosTableName,
       Key: { id: id },
       UpdateExpression: updateExpression,
       ExpressionAttributeValues: expressionAttributeValues,
@@ -222,18 +206,12 @@ app.put('/todos/:id', async (req, res) => {
   }
 });
 
-// DELETE a specific to-do by ID
-// Example: DELETE /todos/:id
-// This endpoint deletes a specific to-do item by its ID.
-// It uses the DynamoDB DocumentClient to remove the item from the "todos" table.
-// The ID is passed as a URL parameter, and the response includes the deleted to-do item
-// if it was found and deleted successfully.
 app.delete('/todos/:id', async (req, res) => {
   try {
     const id = req.params.id;
 
     const params = {
-      TableName: tableName,
+      TableName: todosTableName,
       Key: {
         id: id,
       },
@@ -244,7 +222,7 @@ app.delete('/todos/:id', async (req, res) => {
 
     const result = await dynamodb.send(command);
 
-    if (result && result.Attributes) {
+    if (result && result.Attributes) { // Added check for result being defined
       res.status(200).send(result.Attributes);
     } else {
       res.status(404).send({ message: 'To-do not found.' });
@@ -255,15 +233,124 @@ app.delete('/todos/:id', async (req, res) => {
   }
 });
 
-// Example: Listing DynamoDB tables
-ddb.listTables({}, (err, data) => {
-  if (err) {
-    console.error("Error listing tables:", err);
-  } else {
-    console.log("List of tables:", data.TableNames);
+app.delete('/focus-areas/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const params = {
+      TableName: focusAreasTableName,
+      Key: {
+        id: id,
+      },
+      ReturnValues: 'ALL_OLD',
+    };
+
+    const command = new DeleteCommand(params);
+    const result = await dynamodb.send(command);
+
+    if (result.Attributes) {
+      res.status(200).send({ message: 'Focus area deleted successfully.', deletedItem: result.Attributes });
+    } else {
+      res.status(404).send({ message: 'Focus area not found.' });
+    }
+  } catch (error) {
+    console.error('Error deleting focus area:', error);
+    res.status(500).send({ message: 'Failed to delete focus area.' });
   }
 });
 
-app.listen(port, () => {
-  console.log(`Server listening at http://localhost:${port}`);
+const colorPalette = ["#a8dadc", "#457b9d", "#1d3557", "#f1faee", "#e63946", "#f4a261", "#e9c46a", "#2a9d8f", "#264653", "#d7dbe8", "#c2b0d1", "#a98cc2", "#a98cc2", "#774bb4"]; // Example calm color palette
+
+app.put('/focus-areas/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const { name, color } = req.body;
+
+    const updateExpressionParts = [];
+    const expressionAttributeValues = {};
+
+    if (name !== undefined) {
+      updateExpressionParts.push('#n = :name'); // Use '#n' as a placeholder for 'name'
+      expressionAttributeValues[':name'] = name;
+    }
+    if (color !== undefined) {
+      updateExpressionParts.push('color = :color');
+      expressionAttributeValues[':color'] = color;
+    }
+
+    if (updateExpressionParts.length === 0) {
+      return res.status(400).send({ message: 'No fields to update.' });
+    }
+
+    const updateExpression = 'set ' + updateExpressionParts.join(', ');
+
+    const params = {
+      TableName: focusAreasTableName,
+      Key: { id: id },
+      UpdateExpression: updateExpression,
+      ExpressionAttributeValues: expressionAttributeValues,
+      ReturnValues: 'ALL_NEW',
+      ExpressionAttributeNames: {
+        '#n': 'name', // Map the placeholder '#n' to the attribute name 'name'
+      },
+    };
+
+    const command = new UpdateCommand(params);
+    const result = await dynamodb.send(command);
+
+    if (result.Attributes) {
+      res.status(200).send(result.Attributes);
+    } else {
+      res.status(404).send({ message: 'Focus area not found.' });
+    }
+  } catch (error) {
+    console.error('Error updating focus area:', error);
+    res.status(500).send({ message: 'Failed to update focus area.' });
+  }
+});
+
+app.post('/focus-areas', async (req, res) => {
+  try {
+    const { name } = req.body;
+
+    if (!name) {
+      return res.status(400).send({ message: 'Focus area name is required.' });
+    }
+
+    const newFocusArea = {
+      id: randomUUID(),
+      name: name,
+      color: colorPalette[Math.floor(Math.random() * colorPalette.length)] // Assign a random color
+    };
+
+    const params = {
+      TableName: focusAreasTableName,
+      Item: newFocusArea,
+    };
+
+    const command = new PutCommand(params);
+
+    await dynamodb.send(command);
+
+    res.status(201).send(newFocusArea);
+  } catch (error) {
+    console.error('Error creating focus area:', error);
+    res.status(500).send({ message: 'Failed to create focus area.' });
+  }
+});
+
+app.get('/focus-areas', async (req, res) => {
+  try {
+    const command = new ScanCommand({ TableName: focusAreasTableName });
+    const result = await dynamodb.send(command);
+    res.status(200).send(result.Items);
+  } catch (error) {
+    console.error('Error getting focus areas:', error);
+    res.status(500).send({ message: 'Failed to retrieve focus areas.' });
+  }
+});
+
+const PORT = 3000;
+app.listen(PORT, () => {
+  console.log(`Server listening at http://localhost:${PORT}`);
 });
