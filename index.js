@@ -233,7 +233,81 @@ app.delete('/todos/:id', async (req, res) => {
   }
 });
 
+app.delete('/focus-areas/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const params = {
+      TableName: focusAreasTableName,
+      Key: {
+        id: id,
+      },
+      ReturnValues: 'ALL_OLD',
+    };
+
+    const command = new DeleteCommand(params);
+    const result = await dynamodb.send(command);
+
+    if (result.Attributes) {
+      res.status(200).send({ message: 'Focus area deleted successfully.', deletedItem: result.Attributes });
+    } else {
+      res.status(404).send({ message: 'Focus area not found.' });
+    }
+  } catch (error) {
+    console.error('Error deleting focus area:', error);
+    res.status(500).send({ message: 'Failed to delete focus area.' });
+  }
+});
+
 const colorPalette = ["#a8dadc", "#457b9d", "#1d3557", "#f1faee", "#e63946", "#f4a261", "#e9c46a", "#2a9d8f", "#264653", "#d7dbe8", "#c2b0d1", "#a98cc2", "#a98cc2", "#774bb4"]; // Example calm color palette
+
+app.put('/focus-areas/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const { name, color } = req.body;
+
+    const updateExpressionParts = [];
+    const expressionAttributeValues = {};
+
+    if (name !== undefined) {
+      updateExpressionParts.push('#n = :name'); // Use '#n' as a placeholder for 'name'
+      expressionAttributeValues[':name'] = name;
+    }
+    if (color !== undefined) {
+      updateExpressionParts.push('color = :color');
+      expressionAttributeValues[':color'] = color;
+    }
+
+    if (updateExpressionParts.length === 0) {
+      return res.status(400).send({ message: 'No fields to update.' });
+    }
+
+    const updateExpression = 'set ' + updateExpressionParts.join(', ');
+
+    const params = {
+      TableName: focusAreasTableName,
+      Key: { id: id },
+      UpdateExpression: updateExpression,
+      ExpressionAttributeValues: expressionAttributeValues,
+      ReturnValues: 'ALL_NEW',
+      ExpressionAttributeNames: {
+        '#n': 'name', // Map the placeholder '#n' to the attribute name 'name'
+      },
+    };
+
+    const command = new UpdateCommand(params);
+    const result = await dynamodb.send(command);
+
+    if (result.Attributes) {
+      res.status(200).send(result.Attributes);
+    } else {
+      res.status(404).send({ message: 'Focus area not found.' });
+    }
+  } catch (error) {
+    console.error('Error updating focus area:', error);
+    res.status(500).send({ message: 'Failed to update focus area.' });
+  }
+});
 
 app.post('/focus-areas', async (req, res) => {
   try {
